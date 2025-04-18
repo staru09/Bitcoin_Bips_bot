@@ -69,4 +69,4 @@ def insert_from_csv(csv_file: str):
     print(f"Inserted {len(points)} records into Qdrant")
 
 create_collection(collection_name, vector_size)
-insert_from_csv(r"C:\Users\91745\OneDrive\Desktop\Bitcoin_bips_bot\data\test.csv") 
+insert_from_csv("/home/staru/Desktop/Bitcoin_Bips_bot/data/bips_augmented.csv") 
