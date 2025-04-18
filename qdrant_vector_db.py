@@ -5,6 +5,7 @@ from qdrant_client.http import models
 from openai import OpenAI
 import os
 import ollama 
+from tqdm import tqdm
 
 
 # Set your OpenAI API key for using OpenAI for embedding generation
@@ -12,7 +13,7 @@ import ollama
 # client = OpenAI()
 
 # Qdrant setup
-qdrant = QdrantClient(host="localhost", port=6333) 
+qdrant = QdrantClient(host="localhost", port=6333, timeout=60.0)  # increase timeout in seconds
 collection_name = "my_collection"
 vector_size = 768 #1536 for OpenAI
 
@@ -46,27 +47,32 @@ def get_embedding(text: str) -> list[float]:
     return response['embedding']
 
 # Step 3: Read CSV and insert into Qdrant
-def insert_from_csv(csv_file: str):
+def insert_from_csv(csv_file: str, batch_size: int = 32):
     df = pd.read_csv(csv_file)
-    points = []
-    for _, row in df.iterrows():
-        full = row[0]
-        summary = row[1]
+    total = len(df)
+    for i in tqdm(range(0, total, batch_size), desc="Inserting in batches"):
+        batch = df.iloc[i:i+batch_size]
+        points = []
+        for _, row in batch.iterrows():
+            full = row[0]
+            summary = row[1]
+            embedding = get_embedding(summary)
+            payload = {
+                "source": full,
+                "summary": summary
+            }
 
-        embedding = get_embedding(summary)
-        payload = {
-            "source": full,
-            "summary": summary
-        }
+            points.append(models.PointStruct(
+                id=str(uuid.uuid4()),
+                vector=embedding,
+                payload=payload
+            ))
 
-        points.append(models.PointStruct(
-            id=str(uuid.uuid4()),
-            vector=embedding,
-            payload=payload
-        ))
+        try:
+            qdrant.upsert(collection_name=collection_name, points=points)
+        except Exception as e:
+            print(f"Failed batch {i}–{i+batch_size}: {e}")
 
-    qdrant.upsert(collection_name=collection_name, points=points)
-    print(f"Inserted {len(points)} records into Qdrant")
 
 create_collection(collection_name, vector_size)
 insert_from_csv("/home/staru/Desktop/Bitcoin_Bips_bot/data/bips_augmented.csv") 
